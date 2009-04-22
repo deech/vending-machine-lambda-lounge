@@ -278,12 +278,21 @@ interactiveHandler machine cache lock handle addr msg =
 readCommand :: Machine -> String -> IORef [Money] -> IO String
 readCommand machine s state = case s of
                           ""                -> return ""
-                          "show candystock" -> showStock machine candyStock "Candy Stock is empty"
-                          "show moneystock" -> showStock machine currencyStock "Money Stock is Empty"
-                          "show balance"    -> readIORef state >>= (\x -> return $ show x)
+                          "show candystock" -> showCandyStock machine 
+                          "show moneystock" -> showMoneyStock machine
+                          "show balance"    -> showBalance state
                           "quit"            -> return ""                                                                      
                           "help"            -> return "-Available Commands:\n  insert <Money>\n  show balance | candystock | moneystock\n  restockMoney <Money> \n  restockCandy <Candy>\n  buy <Candy>\n  quit" 
                           _                 -> parseOther machine s state 
+
+showCandyStock machine = showStock machine candyStock    "Candy Stock is empty"
+showMoneyStock machine = showStock machine currencyStock "Money Stock is empty"
+showBalance    state   = readIORef state >>= (\x -> return $ show x)
+
+-- Show the status of whatever the customer is interested in, candy or coins.
+showStock machine f emptyMsg = atomically $ do s' <- f machine
+                                               maybe (return $ emptyMsg) (return . show) s'
+
 
 -- Called only by readCommand, this function actually parses messages that either edit the Vending Machine.
 -- This has way more editing code than I would like, but for now it is simpler.
@@ -291,17 +300,17 @@ parseOther :: Machine -> String -> IORef [Money] -> IO String
 parseOther machine s state = case (head $ words s) of
                          "insert" -> do {x <- return $ Data.List.map toMoney $ snd $ parseResults coinNames;
                                          modifyIORef state ((++) x);
-                                         return $ show x}
+                                         showBalance state}
                          "restockMoney" -> do {x <- return $ Data.List.map toMoney $ snd $ parseResults coinNames;
                                                writeIORef state x;
                                                commitCoins machine state;
-                                               return $ show x}
+                                               showMoneyStock machine}
                          "restockCandy" -> (\candyChoice ->
                                                 if (Data.List.null candyChoice)
                                                   then return "restock what?"
                                                   else do
                                                       atomically $ mapM (\x -> addCandy machine (toCandy x)) candyChoice
-                                                      return "")
+                                                      showCandyStock machine)
                                            (snd $ parseResults candyNames)
                          "buy"    -> (\candyChoice -> 
                                           if (length candyChoice > 1)
@@ -315,11 +324,6 @@ parseOther machine s state = case (head $ words s) of
       parseResults parser = (partitionEithers
                              (Data.List.map (parse parser "(unknown)" . upcase) $
                                   tail $ words s))
-
-
--- Show the status of whatever the customer is interested in, candy or coins.
-showStock machine f emptyMsg = atomically $ do s' <- f machine
-                                               maybe (return $ emptyMsg) (return . show) s'
 
 -- Take coins from the customer's cache and add them to the Vending Machine
 commitCoins :: Machine -> IORef [Money] -> IO ()
@@ -342,7 +346,7 @@ buyCandy machine candyChoice m = do
         atomically $ dispenseCandy machine (toCandy candyChoice)
         (atomically $ do
            (mch',m') <- dispenseChange machine ((fromJust $ fromCurrency $ toNumberedList money') - cost)
-           return m') >>= (\m' -> do {writeIORef m m';return $ show m'})
+           return m') >>= (\m' -> do {writeIORef m m'; return $ "Candy :" ++ candyChoice ++ " Change: " ++ show m'})
     else return $ "More Money"
 
 -- A parser that accepts money names like "dollar" and "quarter"
