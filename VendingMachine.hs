@@ -1,7 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 import Control.Monad
-import Control.Monad.State
 import Control.Concurrent.STM
 import GHC.Conc
 import Data.Map
@@ -175,23 +174,18 @@ modInv inv c f = do
   x <-  Data.List.lookup (Item c) $ Data.List.filter ((>0) . snd) inv
   return $ Data.Map.toList $ Data.Map.insert (Item c) (f x) $ Data.Map.fromList inv
 
--- Pure function that modifies the amount of a change according the 'f'
-modCurr ch c f = do
-  x <- Data.Map.lookup c $ Data.Map.filter (<0) ch
-  return $ Data.Map.insert c (f x) ch
 
+-- Removes one candy bar from vending machine    
 dispenseCandy :: Machine -> Name -> STM Machine
-dispenseCandy m c = do
-  (inv,ch) <- readTVar m
-  case modInv inv c (\x -> x - 1) of
-      Just a -> writeTVar m (a,ch)
-      Nothing -> retry
-  return m
-
+dispenseCandy m n = (editCandyStock m (\x -> x - 1) n) >> return m
+-- Adds one candy bar to vending machine
 addCandy :: Machine -> Name -> STM ()
-addCandy m c = do
+addCandy m c = editCandyStock m (1+) c
+
+editCandyStock :: Machine -> (Int -> Int) -> Name -> STM ()
+editCandyStock m f n = do
   (inv,ch) <- readTVar m
-  case modInv inv c (\x -> x + 1) of
+  case modInv inv n f of
       Just a -> writeTVar m (a,ch)
       Nothing -> retry
 
@@ -296,22 +290,18 @@ readCommand machine s state = case s of
 parseOther :: Machine -> String -> IORef [Money] -> IO String
 parseOther machine s state = case (head $ words s) of
                          "insert" -> do {x <- return $ Data.List.map toMoney $ snd $ parseResults coinNames;
-                                         y <- readIORef state;
-                                         writeIORef state (y ++ x);
+                                         modifyIORef state ((++) x);
                                          return $ show x}
                          "restockMoney" -> do {x <- return $ Data.List.map toMoney $ snd $ parseResults coinNames;
-                                               writeIORef state [];
                                                writeIORef state x;
                                                commitCoins machine state;
                                                return $ show x}
                          "restockCandy" -> (\candyChoice ->
-                                                if (length candyChoice > 1)
-                                                  then return "One candy at a time"
-                                                  else if (Data.List.null candyChoice)
-                                                         then return "restock what?"
-                                                         else do
-                                                             atomically $ addCandy machine (toCandy (head candyChoice))
-                                                             return "")
+                                                if (Data.List.null candyChoice)
+                                                  then return "restock what?"
+                                                  else do
+                                                      atomically $ mapM (\x -> addCandy machine (toCandy x)) candyChoice
+                                                      return "")
                                            (snd $ parseResults candyNames)
                          "buy"    -> (\candyChoice -> 
                                           if (length candyChoice > 1)
