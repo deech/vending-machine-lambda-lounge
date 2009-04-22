@@ -1,0 +1,90 @@
+-----------------------------------------
+- Lambda Lounge Vending Machine 
+-----------------------------------------
+--- Contents ---
+- Overview
+- Usage
+- Sample Run
+
+--- Overview ---
+This program implements in Haskell the vending machine specified by the Lambda Lounge shootout [1] in May 2009. To make life more interesting, it as a multi-user vending machine that is restocked and services requests real-time over telnet. I did this to explore Haskell's Software Transactional Memory [2].
+
+The included binary runs only on Linux i386/i686 machines.
+
+--- Usage ---
+1. Run the 'VendingMachine' binary included in this directory from a shell prompt to start the server:
+> ./VendingMachine
+
+2. To start a client telnet to port 8000 of the server machine. In the case that the server and client are on the same machine:
+> telnet localhost 8000
+
+-- Sample Run --
+User commands are prefixed with '>', comments to guide you thorough the process are prefixed with '--'.
+
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+--show how to interact with the machine
+> help 
+-Available Commands:
+  insert <Money>
+  show balance | candystock | moneystock
+  restockMoney <Money> 
+  restockCandy <Candy>
+  buy <Candy>
+  quit
+
+-- Add money to your cache. You now have $2.35 in your cache
+> show balance
+[]
+> insert dollar dollar quarter
+[Dollar,Dollar,Quarter]
+> insert dime
+[Dime]
+> show balance
+[Dollar,Dollar,Quarter,Dime]
+
+-- Show the candy stock, in this case there
+-- are 7 "Dollar" candies etc.
+> show candystock
+[(Item "SixtyFive",10),(Item "Dollar",7),(Item "BuckFifty",9)]
+
+-- Try to buy something without enough money. Note you can 
+-- only buy one candy at a time. Transaction like,
+-- > buy buckfifty dollar
+-- are not supported.
+> buy buckfifty
+More Money
+
+-- Add some more money and try again. Assume you have the candy when
+-- the machine dispenses change. Below, for instance, your leftover 
+-- cache from buying "BuckFifty" which costs $1.50 is a dollar and a
+-- dime. You can then use this to buy "SixtyFive" which costs $0.65 
+-- giving leaving a quarter and two dimes
+> insert quarter
+[Quarter]
+> buy buckfifty
+[Dollar,Dime]
+> buy sixtyfive
+[Quarter,Dime,Dime]
+
+-- You can also restock the vending machine
+> show moneystock
+[(Nickel,1),(Dime,0),(Quarter,1),(Dollar,3)]
+> restockMoney quarter dime
+[Quarter,Dime]
+> show moneystock
+[(Nickel,1),(Dime,1),(Quarter,2),(Dollar,3)]
+> show candystock
+[(Item "BuckFifty",8),(Item "Dollar",7),(Item "SixtyFive",9)]
+> restockCandy dollar
+> show candystock
+[(Item "BuckFifty",8),(Item "Dollar",8),(Item "SixtyFive",9)]
+
+--And you can quit!
+> quit
+Connection closed by foreign host.
+
+
+[1] http://stllambdalounge.files.wordpress.com/2009/03/vendingmachinespecification.pdf
+[2] http://book.realworldhaskell.org/read/software-transactional-memory.html
