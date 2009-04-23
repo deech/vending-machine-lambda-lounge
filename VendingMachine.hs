@@ -175,8 +175,8 @@ modInv inv c f = do
 
 
 -- Removes one candy bar from vending machine    
-dispenseCandy :: Machine -> Name -> STM Machine
-dispenseCandy m n = (editCandyStock m (\x -> x - 1) n) >> return m
+dispenseCandy :: Machine -> Name -> STM ()
+dispenseCandy m n = editCandyStock m (\x -> x - 1) n
 -- Adds one candy bar to vending machine
 addCandy :: Machine -> Name -> STM ()
 addCandy m c = editCandyStock m (1+) c
