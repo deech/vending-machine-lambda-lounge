@@ -170,16 +170,15 @@ candyStock m = do
 
 -- Pure function that modifies the amount of a certain candy according the 'f'
 modInv inv c f = do
-  x <-  Data.List.lookup (Item c) $ Data.List.filter ((>0) . snd) inv
+  x <-  Data.List.lookup (Item c) inv
   return $ Data.Map.toList $ Data.Map.insert (Item c) (f x) $ Data.Map.fromList inv
-
 
 -- Removes one candy bar from vending machine    
 dispenseCandy :: Machine -> Name -> STM ()
 dispenseCandy m n = editCandyStock m (\x -> x - 1) n
 -- Adds one candy bar to vending machine
 addCandy :: Machine -> Name -> STM ()
-addCandy m c = editCandyStock m (1+) c
+addCandy m c = editCandyStock m (\x -> x + 1) c
 
 editCandyStock :: Machine -> (Int -> Int) -> Name -> STM ()
 editCandyStock m f n = do
@@ -367,7 +366,7 @@ testMachine :: STM (TVar (Inventory, Change))
 testMachine = newTVar (candy, [(Nickel, 1), (Quarter, 0), (Dime, 1), (Dollar, 1)])
 
 candy = [(Item "SixtyFive"  ,10),
-         (Item "Dollar"     , 7),
+         (Item "Dollar"     , 1),
          (Item "BuckFifty", 9)]
 
 -- Entry point into the program
