@@ -26,6 +26,9 @@ import Text.ParserCombinators.Parsec
 import Data.Either
 import Text.ParserCombinators.Parsec.Prim
 
+--For Debugging
+import System.IO.Unsafe
+
 ----------------------------------------------------------------------------
 -- The Big Picture:
 -- This vending machine holds candy and change. It simultaneously services
@@ -87,6 +90,7 @@ fromMoney s = case s of
 
 toCandy s = case s of
                 "SIXTYFIVE" -> "SixtyFive"
+                "SEVENTY"   -> "Seventy"
                 "DOLLAR"    -> "Dollar"
                 "BUCKFIFTY" -> "BuckFifty"
 
@@ -115,7 +119,7 @@ currencyConvert currency = Data.Map.lookup currency moneyMap
 
 -- Maps candy names to cost
 candyMap :: Data.Map.Map Name Cost
-candyMap = Data.Map.fromList [("SixtyFive" , 65), ("Dollar", 100), ("BuckFifty", 150)]
+candyMap = Data.Map.fromList [("SixtyFive" , 65), ("Seventy", 70), ("Dollar", 100), ("BuckFifty", 150)]
 
 -- Tallys up a number of coins
 -- Eg. [(Nickel,2),(Dime,1),(Quarter,0),(Dollar,0)] => 20
@@ -135,6 +139,7 @@ giveChange :: [Money] -> [Money] -> Number -> Maybe ([Money], [Money])
 giveChange cust cashier moneyLeft =
     do
       (good,bad) <- return $ Data.List.partition (\x -> (<= moneyLeft) . fromJust $ currencyConvert x) $ reverse $ sort cashier
+      return $ unsafePerformIO $ putStrLn $ "( " ++ ( show good ) ++ "," ++ ( show bad ) ++ " )" 
       if ((Data.List.null cashier || Data.List.null good) && (moneyLeft > 0))
         then mzero
         else 
@@ -305,6 +310,7 @@ parseOther machine s state = case (head $ words s) of
                          "restockMoney" -> do {x <- return $ Data.List.map toMoney $ snd $ parseResults coinNames;
                                                writeIORef state x;
                                                commitCoins machine state;
+                                               writeIORef state [];
                                                showMoneyStock machine}
                          "restockCandy" -> (\candyChoice ->
                                                 if (Data.List.null candyChoice)
@@ -365,8 +371,9 @@ testMachine :: STM (TVar (Inventory, Change))
 testMachine = newTVar (candy, [(Nickel, 1), (Quarter, 0), (Dime, 1), (Dollar, 1)])
 
 candy = [(Item "SixtyFive"  ,10),
-         (Item "Dollar"     , 1),
-         (Item "BuckFifty", 9)]
+         (Item "Seventy"    ,1),
+         (Item "Dollar"     ,1),
+         (Item "BuckFifty"  ,9)]
 
 -- Entry point into the program
 main = server $ PortNumber 8000
