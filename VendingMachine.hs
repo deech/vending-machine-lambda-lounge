@@ -7,7 +7,6 @@ import Data.Map
 import Data.Maybe
 import List
 import Control.Arrow 
-import Data.List.Split
 import qualified Control.Exception as E
 
 --For server
@@ -254,10 +253,14 @@ procMessages machine lock connsock clientaddr =
        hSetBuffering connhdl LineBuffering
        messages <- hGetContents connhdl
        cache <- newIORef []
+       showThreadStatus
        mapM_ (interactiveHandler machine cache lock connhdl clientaddr) (lines messages)
        hClose connhdl
        logHandle lock clientaddr
               "myserver.hs : Client disconnected"
+
+showThreadStatus :: IO ()
+showThreadStatus = myThreadId >>= threadStatus >>= (\x -> putStrLn $ "Thread Status :" ++ (show x)) 
 
 -- The main handler for all incoming connections. Its main function is to dispatch incoming messages to 
 -- a parsing function and send the resulting message back to the client. The sole exception is "quit" which
