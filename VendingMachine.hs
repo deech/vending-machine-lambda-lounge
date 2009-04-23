@@ -103,11 +103,12 @@ toNumberedList m =
     let emptyList = Data.Map.fromList [(Nickel,0),(Dime,0),(Quarter,0),(Dollar,0)] in
     Data.Map.toList $
         Data.Map.mapWithKey
-            (\k v -> let vs = Data.List.filter (== k) m in
-                       if (not $ Data.List.null vs)
-                         then (v + (length vs))
-                         else v)
-            emptyList
+            (\k v ->  v + ( length $ Data.List.filter (== k) m ) ) emptyList
+--             let vs = Data.List.filter (== k) m in
+--                        if (not $ Data.List.null vs)
+--                          then (v + (length vs))
+--                          else v
+
 
 -- Maps coins to their value
 moneyMap :: Data.Map.Map Money Number
