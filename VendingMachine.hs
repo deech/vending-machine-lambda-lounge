@@ -104,11 +104,6 @@ toNumberedList m =
     Data.Map.toList $
         Data.Map.mapWithKey
             (\k v ->  v + ( length $ Data.List.filter (== k) m ) ) emptyList
---             let vs = Data.List.filter (== k) m in
---                        if (not $ Data.List.null vs)
---                          then (v + (length vs))
---                          else v
-
 
 -- Maps coins to their value
 moneyMap :: Data.Map.Map Money Number
@@ -253,12 +248,15 @@ procMessages machine lock connsock clientaddr =
        hSetBuffering connhdl LineBuffering
        messages <- hGetContents connhdl
        cache <- newIORef []
-       showThreadStatus
        mapM_ (interactiveHandler machine cache lock connhdl clientaddr) (lines messages)
        hClose connhdl
        logHandle lock clientaddr
               "myserver.hs : Client disconnected"
 
+-- For debugging purposes, print the current thread status: Thread Status :[ThreadRunning|
+--                                                                          ThreadFinished|
+--                                                                          ThreadBlocked BlockReason|
+--                                                                          ThreadDied]
 showThreadStatus :: IO ()
 showThreadStatus = myThreadId >>= threadStatus >>= (\x -> putStrLn $ "Thread Status :" ++ (show x)) 
 
