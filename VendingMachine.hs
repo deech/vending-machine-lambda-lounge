@@ -27,9 +27,12 @@ import Data.Either
 import Text.ParserCombinators.Parsec.Prim
 
 --For Debugging
+import Debug.Trace
 import System.IO.Unsafe
 
 ----------------------------------------------------------------------------
+-- Created by Aditya Siram for Lambda Lounge May 2009 Language Shootout
+-- 
 -- The Big Picture:
 -- This vending machine holds candy and change. It simultaneously services
 -- multiple customers and can be restocked real-time. It will block forever if 
@@ -65,7 +68,6 @@ type Number = Int
 type Change = [(Money, Number)]
 data Item = Item Name deriving (Show,Ord,Eq)
 type Inventory = [(Item,Number)]
-
 type Machine = TVar (Inventory, Change)
 
 divisible :: (Integral a) => a -> a -> Bool
@@ -130,6 +132,9 @@ fromCurrency change = foldM toNumber 0 change
           do w <- currencyConvert m
              return $ (w * am) + balance'
 
+worth :: Money -> Number
+worth = fromJust . currencyConvert
+
 -- Coins and currency are dispensed from the cashier to the customer.
 -- Example, the cashier has [Dollar, Quarter, Dime, Dime, Nickel] and the
 -- customer needs $1.40, the output of this function is 
@@ -139,7 +144,7 @@ giveChange :: [Money] -> [Money] -> Number -> Maybe ([Money], [Money])
 giveChange cust cashier moneyLeft =
     do
       (good,bad) <- return $ Data.List.partition (\x -> (<= moneyLeft) . fromJust $ currencyConvert x) $ reverse $ sort cashier
-      return $ unsafePerformIO $ putStrLn $ "( " ++ ( show good ) ++ "," ++ ( show bad ) ++ " )" 
+      trace ( "( " ++ ( show good ) ++ "," ++ ( show bad ) ++ " )" ) (Just 0)
       if ((Data.List.null cashier || Data.List.null good) && (moneyLeft > 0))
         then mzero
         else 
