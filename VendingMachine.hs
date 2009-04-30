@@ -1,4 +1,34 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+----------------------------------------------------------------------------
+-- Created by Aditya Siram for Lambda Lounge May 2009 Language Shootout
+-- 
+-- The Big Picture:
+-- This vending machine holds candy and change. It simultaneously services
+-- multiple customers and can be restocked real-time. It will block forever if 
+-- it cannot make change or does not have enough candy. While a more realistic
+-- single user vending machine would refuse to carry out the transaction 
+-- and return the customers money , in a multi-user 
+-- scenario there is always the chance that someone will come along and either
+-- restock the candy/change or buy some candy.
+--
+-- Additionally this vending machine allows all users to restock it.
+--
+-- The vending machine is a server process that runs on port 8000 and accepts
+-- telnet clients.
+--
+-- The compilation command is:
+--       ghc VendingMachine.hs --make -optl-static -optl-pthread -fforce-recomp
+-- Note, this will barf up a bunch of harmless warnings.
+--
+-- Rough Control Flow:
+-- main -> server -> multiple 'procMessages' for each thread
+--  Per thread :
+--  'procMessages' ->
+--     interactiveHandler -> 
+--         readCommand -> <some requests are serviced here>
+--                    |
+--                     -> parseOther <all others are serviced here>
+---------------------------------------------------------------------------
 
 import Control.Monad
 import Control.Concurrent.STM
@@ -30,36 +60,6 @@ import Text.ParserCombinators.Parsec.Prim
 import Debug.Trace
 import System.IO.Unsafe
 
-----------------------------------------------------------------------------
--- Created by Aditya Siram for Lambda Lounge May 2009 Language Shootout
--- 
--- The Big Picture:
--- This vending machine holds candy and change. It simultaneously services
--- multiple customers and can be restocked real-time. It will block forever if 
--- it cannot make change or does not have enough candy. While a more realistic
--- single user vending machine would refuse to carry out the transaction 
--- and return the customers money , in a multi-user 
--- scenario there is always the chance that someone will come along and either
--- restock the candy/change or buy some candy.
---
--- Additionally this vending machine allows all users to restock it.
---
--- The vending machine is a server process that runs on port 8000 and accepts
--- telnet clients.
---
--- The compilation command is:
---       ghc VendingMachine.hs --make -optl-static -optl-pthread -fforce-recomp
--- Note, this will barf up a bunch of harmless warnings.
---
--- Rough Control Flow:
--- main -> server -> multiple 'procMessages' for each thread
---  Per thread :
---  'procMessages' ->
---     interactiveHandler -> 
---         readCommand -> <some requests are serviced here>
---                    |
---                     -> parseOther <all others are serviced here>
----------------------------------------------------------------------------
 
 data Money = Nickel | Dime | Quarter | Dollar deriving (Ord, Eq, Show, Enum)
 type Cost = Int
