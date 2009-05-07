@@ -357,12 +357,13 @@ buyCandy :: Machine -> Name -> IORef [Money] -> IO String
 buyCandy machine candyChoice m = do
   money' <- readIORef m
   cost <- return $ fromJust $ Data.Map.lookup (toCandy candyChoice) candyMap
+  machineBal <- return $ fromJust $ fromCurrency $ toNumberedList money'
   if (fromJust $ fromCurrency $ toNumberedList money') >=  cost
     then do
         atomically $ addChange machine money'
         atomically $ dispenseCandy machine (toCandy candyChoice)
         (atomically $ do
-           (mch',m') <- dispenseChange machine ((fromJust $ fromCurrency $ toNumberedList money') - cost)
+           (mch',m') <- dispenseChange machine ( machineBal - cost)
            return m') >>= (\m' -> do {writeIORef m m'; return $ "Candy :" ++ candyChoice ++ " Change: " ++ show m'})
     else return $ "More Money"
 
