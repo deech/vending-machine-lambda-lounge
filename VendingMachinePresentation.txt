@@ -1,0 +1,338 @@
+% Vending Machine Server
+% Aditya Siram
+% May 7, 2009
+
+# Vending Machine Server
+
+- Multiple simultaneous clients 
+- Can be restocked by any client
+- Waits if there isn't enough change or candy
+
+# Preliminaries
+
+- Source, a static Linux binary and this presentation available at: 
+    - http://github.com/deech/vending-machine-lambda-lounge/tree/master
+- Also linked from the Lambda Lounge Google page
+- I'll take questions at the end
+
+# The Demo
+- Thrill as I buy candy ...
+
+# Haskell Propoganda 
+
+- Very easy to install the compiler and libraries
+     - just download and run the GHC binary
+     - cabal-install as easy as apt-get     
+- Great user community
+     - \#haskell 
+     - fa.haskell
+- Real World Haskell 
+- Very cheap threads
+- Well-engineered concurrency libraries like ...
+- Software Transaction Memory!
+
+# Topics Not Covered
+
+- Due to time constraints I will not cover:
+    - Every line of code and specifically ...
+    - Creating a server process and handling incoming messages
+    - Parsing user messages with Parsec
+    - Many of the utility functions
+- Defer to Alex Stangl's presentation next month
+- Focus will be on Software Transactional Memory
+
+
+# Software Transactional Memory
+
+- Abstracts away locks and mutexes
+- Make operations composable by isolating them
+- Retry an operation if the resource is unavailable.
+- Don't worry, I have actual code ...
+
+# The Datatypes
+- First we define the datatypes
+- *data* constructs a new type
+- *type* is an alias for an existing type
+- *TVar* implies a global mutable variable
+
+---------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.haskell}
+data Money = Nickel | Dime | Quarter | Dollar
+type Cost = Int
+type Name = String
+type Number = Int
+type Change = [(Money, Number)]
+data Item = Item Name
+type Inventory = [(Item,Number)]
+type Machine = TVar (Inventory, Change)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+# Initial State Of the Machine
+
+- Note how the vending machine is locked into *STM* from the beginning.
+
+--------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.haskell}
+testMachine :: STM (TVar (Inventory, Change))
+testMachine = newTVar (candy, [(Nickel,  1),
+                               (Quarter, 0),
+                               (Dime,    1),
+                               (Dollar,  1)])
+candy :: Inventory
+candy = [(Item "SixtyFive" ,10),
+         (Item "Seventy"   ,1),
+         (Item "Dollar"    ,1),
+         (Item "BuckFifty" ,9)]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Reading Amount Of Money 
+- Reading is allowed *only* inside the STM Monad
+- *readTVar* extracts our inventory and change
+
+------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~{.haskell}
+type Machine = TVar (Inventory, Change)
+
+currencyStock :: Machine -> STM (Maybe Change)
+currencyStock m = do 
+  (inv, ch) <- readTVar m
+  case ch of
+      [] -> return $ Nothing
+      x  -> return $ Just x
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Reading Amount Of Candy 
+- Reading is allowed *only* inside the STM Monad
+- *readTVar* extracts our inventory and change
+
+------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.haskell}
+type Machine = TVar (Inventory, Change)
+
+candyStock :: Machine -> STM (Maybe Inventory)
+candyStock m = do
+  (inv,ch) <- readTVar m
+  return $ Just inv
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+# Outputting read values
+
+- *f* is either *candyStock* or *currencyStock*
+- *maybe* either returns candy stock or *emptyMsg*
+- *show* \~= Java's *toString*.
+- *atomically* does everything in one fell swoop
+
+-------------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.haskell}
+showStock :: (Show a) => Machine ->
+                         (Machine -> STM (Maybe a)) ->
+                         String -> IO String
+showStock machine f emptyMsg = atomically $ 
+  do s' <- f machine maybe (return $ emptyMsg)
+                           (return . show)
+                           s'
+-- showStock testMachine candyStock "No Candy" >>= print
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Reading Global Mutable Variables
+
+>- All reading operations have the *STM* tag
+>- *atomically* is the only way out
+>- *atomically* ensures atomic transactions
+>- Atomic transactions ->  **composability**
+>- Makes code easier to think about. 
+>- unSafeIOToSTM is a backdoor. Highly dangerous. 
+>- Using it gets you a purple nurple on #haskell.
+
+# Editing Candy Stock 
+- Candy is stored in *Inventory* by name and amount
+- eg. *(Item "SixtyFive",10)*
+- Adding one "SixtyFive"=>*(Item "SixtyFive",11)*
+- Buying one "SixtyFive"=>*(Item "SixtyFive",9)*
+
+# Editing Candy Stock 1/3
+
+- Find the amount of candy *c* in inventory
+- Do *f* to the amount and update inventory
+- *fromList* [(a,b)] => Map (a,b)
+- *toList* Map (a,b) => [(a,b)]
+
+---------------------------------------
+~~~~~~~~~~~~~~~~~{.haskell}
+modInv inv c f = do
+  x <- Data.List.lookup (Item c) inv
+  new <- return $ f x
+  case (new >= 0) of
+      True -> return $ Data.Map.toList $
+                       Data.Map.insert (Item c) new $
+                       Data.Map.fromList inv
+      False -> Nothing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Editing Candy Stock 2/3
+- Extract inventory, modify it, write it back
+- *retry* is STM magic
+- Invoked if the machine runs out of candy.
+- Waits until there's candy and restarts the function.
+
+--------------------------------------------
+~~~~~~~~~~~~~~~~{.haskell}
+editCandyStock :: Machine -> (Int -> Int) -> Name
+                  -> STM ()
+editCandyStock m f n = do
+  (inv,ch) <- readTVar m
+  case modInv inv n f of
+      Just a -> writeTVar m (a,ch)
+      Nothing -> retry
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Editing Candy Stock 3/3
+- Actual adding and deleting are simple one-liners
+
+-------------------------------------------
+~~~~~~~~~~~~~~~~~{.haskell}
+dispenseCandy :: Machine -> Name -> STM ()
+dispenseCandy m n = editCandyStock m (\x -> x - 1) n
+
+addCandy :: Machine -> Name -> STM ()
+addCandy m c = editCandyStock m (\x -> x + 1) c
+
+-- atomically $ addCandy testMachine "SixtyFive" >>
+-- print "Added SixtyFive"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Editing Change Stock
+
+- Change is just another global mutable resource
+- And because this is Haskell ...
+- Just read the types and ignore the implementation!
+
+---------------------------------------
+~~~~~~~~~~~~~~~~~{.haskell}
+data Money = Nickel | Dime | Quarter | Dollar 
+type Number = Int
+type Machine = TVar (Inventory, Change)
+dispenseChange :: Machine -> Number
+                  -> STM (Machine,[Money])
+addChange :: Machine -> [Money] -> STM ()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Writing Global Mutable Variables
+>- All write operations also have the STM tag
+>- *atomically* is still the only way out
+>- But we have two new ideas.
+>- *writeTVar* edits a thread variable, vs. *readTVar*
+>- *retry* waits until the resource is available and restarts the function.
+>- *retry* is not on a timer. Only invoked if the relevant TVar changes.
+
+
+# Buying Candy 1/5
+- The actual block of code that buys candy
+
+--------------------------------------
+~~~~~~~~~~~~{.haskell}
+atomically $ addChange machine money'           
+atomically $ dispenseCandy machine
+               (toCandy candyChoice)
+atomically $
+  do (mch',m') <- dispenseChange machine
+                  (machineBal - cost)
+     return m'  
+   >>= (\m' -> do {writeIORef m m';
+                      return $ "Candy :" ++
+                             candyChoice ++
+                             " Change: " ++
+                             show m'})
+~~~~~~~~~~~~~~~~~~~~
+
+
+# Buying Candy 2/5
+- Focus on the first three *atomically* blocks
+
+--------------------------------------
+~~~~~~~~~~~~{.haskell}
+atomically $ addChange machine money'           
+atomically $ dispenseCandy machine
+               (toCandy candyChoice)
+atomically $
+  do (mch',m') <- dispenseChange machine
+                  (machineBal - cost)
+     return m'  
+   >>= (\m' -> do {writeIORef m m';
+                      return $ "Candy :" ++
+                             candyChoice ++
+                             " Change: " ++
+                             show m'})
+~~~~~~~~~~~~~~~~~~~~
+
+# Buying Candy 3/5
+- Why not mush 'em into one *atomically* block?
+
+--------------------------------------
+~~~~~~~~~~~~{.haskell}
+atomically $ addChange machine money'           
+atomically $ dispenseCandy machine
+               (toCandy candyChoice)
+atomically $
+  do (mch',m') <- dispenseChange machine
+                  (machineBal - cost)
+     return m'  
+   >>= (\m' -> do {writeIORef m m';
+                      return $ "Candy :" ++
+                             candyChoice ++
+                             " Change: " ++
+                             show m'})
+~~~~~~~~~~~~~~~~~~~~
+
+# Buying Candy 4/5
+- So that other threads can work in.
+
+--------------------------------------
+~~~~~~~~~~~~{.haskell}
+atomically $ addChange machine money'           
+atomically $ dispenseCandy machine
+               (toCandy candyChoice)
+atomically $
+  do (mch',m') <- dispenseChange machine
+                  (machineBal - cost)
+     return m'  
+   >>= (\m' -> do {writeIORef m m';
+                      return $ "Candy :" ++
+                             candyChoice ++
+                             " Change: " ++
+                             show m'})
+~~~~~~~~~~~~~~~~~~~~
+
+# Buying Candy 5/5
+- The rest hands over change and a message.
+
+--------------------------------------
+~~~~~~~~~~~~{.haskell}
+atomically $ addChange machine money'           
+atomically $ dispenseCandy machine
+               (toCandy candyChoice)
+atomically $
+  do (mch',m') <- dispenseChange machine
+                  (machineBal - cost)
+     return m'  
+   >>= (\m' -> do {writeIORef m m';
+                      return $ "Candy :" ++
+                             candyChoice ++
+                             " Change: " ++
+                             show m'})
+~~~~~~~~~~~~~~~~~~~~
+
+# Summary
+>- STM is promising but only the beginning
+>- Global mutable variables are evil and must be controlled with an iron fist. 
+>- The totalitarian type system zealously guards access to these variables.
+>- Initially this is constricting. 
+>- But the idea is "Wrestle the compiler now, or a user at 3am"
+>- Thanks for listening!
+>- Questions?
+
+
+
+
