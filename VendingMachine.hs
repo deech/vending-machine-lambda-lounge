@@ -65,8 +65,8 @@ data Money = Nickel | Dime | Quarter | Dollar deriving (Ord, Eq, Show, Enum)
 type Cost = Int
 type Name = String
 type Number = Int
-type Change = [(Money, Number)]
 data Item = Item Name deriving (Show,Ord,Eq)
+type Change = [(Money, Number)]
 type Inventory = [(Item,Number)]
 type Machine = TVar (Inventory, Change)
 
@@ -154,7 +154,7 @@ giveChange cust cashier moneyLeft =
                       giveChange (cust ++ [(head good)])
                                      ((tail good) ++ bad)
                                      (moneyLeft - newCoin)}
-
+ 
 balance :: Machine -> STM (Maybe Number)
 balance m = do
   (inv, ch) <- readTVar m
@@ -175,9 +175,13 @@ candyStock m = do
   return $ Just inv
 
 -- Pure function that modifies the amount of a certain candy according the 'f'
+modInv :: Inventory -> Name -> (Number -> Number) -> Maybe Inventory
 modInv inv c f = do
   x <-  Data.List.lookup (Item c) inv
-  return $ Data.Map.toList $ Data.Map.insert (Item c) (f x) $ Data.Map.fromList inv
+  new <- return $ f x
+  case (new >= 0) of
+      True -> return $ Data.Map.toList $ Data.Map.insert (Item c) new $ Data.Map.fromList inv
+      False -> Nothing
 
 -- Removes one candy bar from vending machine    
 dispenseCandy :: Machine -> Name -> STM ()
@@ -301,6 +305,7 @@ showMoneyStock machine = showStock machine currencyStock "Money Stock is empty"
 showBalance    state   = readIORef state >>= (\x -> return $ show x)
 
 -- Show the status of whatever the customer is interested in, candy or coins.
+showStock :: (Show a) => Machine -> (Machine -> STM (Maybe a)) -> String -> IO String
 showStock machine f emptyMsg = atomically $ do s' <- f machine
                                                maybe (return $ emptyMsg) (return . show) s'
 
@@ -370,11 +375,11 @@ candyNames = (foldr ((<|>) . try . string) mzero $ Data.List.map (upcase . unIte
 unItem :: (Item,Number) -> Name
 unItem (Item a, b) = a
 
-
 -- The initial state of the Vending machine
 testMachine :: STM (TVar (Inventory, Change))
 testMachine = newTVar (candy, [(Nickel, 1), (Quarter, 0), (Dime, 1), (Dollar, 1)])
 
+candy :: Inventory
 candy = [(Item "SixtyFive"  ,10),
          (Item "Seventy"    ,1),
          (Item "Dollar"     ,1),
